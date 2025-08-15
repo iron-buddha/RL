@@ -4,16 +4,59 @@ from typing import Optional, TYPE_CHECKING
 
 import tcod.event
 
-from actions import Action, BumpAction, EscapeAction
+from actions import Action, BumpAction, EscapeAction, WaitAction
 
 if TYPE_CHECKING:
     from engine import Engine
 
+MOVE_KEYS = {
+    # arrow keys
+    tcod.event.KeySym.UP: (0, -1),
+    tcod.event.KeySym.DOWN: (0, 1),
+    tcod.event.KeySym.LEFT: (-1, 0),
+    tcod.event.KeySym.RIGHT: (1, 0),
+    tcod.event.KeySym.HOME: (-1, -1),
+    tcod.event.KeySym.END: (-1, 1),
+    tcod.event.KeySym.PAGEUP: (1, -1),
+    tcod.event.KeySym.PAGEDOWN: (1, 1),
+    # NumPad keys
+    tcod.event.KeySym.KP_1: (-1, 1),
+    tcod.event.KeySym.KP_2: (0, 1),
+    tcod.event.KeySym.KP_3: (1, 1),
+    tcod.event.KeySym.KP_4: (-1, 0),
+    tcod.event.KeySym.KP_6: (1, 0),
+    tcod.event.KeySym.KP_7: (-1, -1),
+    tcod.event.KeySym.KP_8: (0, -1),
+    tcod.event.KeySym.KP_9: (1, -1),
+    # VI keys
+    tcod.event.KeySym.H: (-1, 0),
+    tcod.event.KeySym.J: (0, 1),
+    tcod.event.KeySym.K: (0, -1),
+    tcod.event.KeySym.L: (1, 0),
+    tcod.event.KeySym.Y: (-1, -1,),
+    tcod.event.KeySym.U: (1, -1),
+    tcod.event.KeySym.B: (-1, 1),
+    tcod.event.KeySym.N: (1, 1),    
+}
+
+WAIT_KEYS = {
+    tcod.event.KeySym.PERIOD,
+    tcod.event.KeySym.KP_5,
+    tcod.event.KeySym.CLEAR,
+}
 
 class EventHandler(tcod.event.EventDispatch[Action]):
     def __init__(self, engine: Engine):
         self.engine = engine
+    
+    def handle_events(self) -> None:
+        raise NotImplementedError()
+    
+    def ev_quit(self, event: tcod.event.Quit) -> Optional[Action]:
+        raise SystemExit()
+    
 
+class MainGameEventHandler(EventHandler):
     def handle_events(self) -> None:
         for event in tcod.event.wait():
             action = self.dispatch(event)
@@ -27,9 +70,6 @@ class EventHandler(tcod.event.EventDispatch[Action]):
             self.engine.update_fov() # update the FOV before players next action
 
 
-    def ev_quit(self, event: tcod.event.Quit) -> Optional[Action]:
-        raise SystemExit()
-
     def ev_keydown(self, event: tcod.event.KeyDown) -> Optional[Action]:
         action: Optional[Action] = None
 
@@ -37,17 +77,32 @@ class EventHandler(tcod.event.EventDispatch[Action]):
 
         player = self.engine.player
 
-        if key == tcod.event.K_UP:
-            action = BumpAction(player, dx=0, dy=-1)
-        elif key == tcod.event.K_DOWN:
-            action = BumpAction(player, dx=0, dy=1)
-        elif key == tcod.event.K_LEFT:
-            action = BumpAction(player, dx=-1, dy=0)
-        elif key == tcod.event.K_RIGHT:
-            action = BumpAction(player, dx=1, dy=0)
-
-        elif key == tcod.event.K_ESCAPE:
-            action = EscapeAction(player)
+        if key in MOVE_KEYS:
+            dx, dy = MOVE_KEYS[key]
+            action = BumpAction(player, dx, dy)
+        elif key in WAIT_KEYS:
+            action = WaitAction(player)
 
         # No valid key was pressed
+        return action
+    
+class GameOverEventHandler(EventHandler):
+    def handle_events(self) -> None:
+        for event in tcod.event.wait():
+            action = self.dispatch(event)
+
+            if action is None:
+                continue
+
+            action.perform()
+    
+    def ev_keydown(self, event: tcod.event.KeyDown) -> Optional[Action]:
+        action: Optional[Action] = None
+
+        key = event.sym
+
+        if key == tcod.event.KeySym.ESCAPE:
+            action = EscapeAction(self.engine.player)
+
+        #no valid key was pressed
         return action
